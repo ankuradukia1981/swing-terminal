@@ -10,9 +10,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from groq import Groq
-from nsepython import NsePython
 import requests
-import json
 
 # ============================================================
 # PAGE CONFIG
@@ -47,8 +45,6 @@ h1, h2, h3, h4 { color: #FF8C00 !important; font-family: 'Consolas', monospace !
 @keyframes scroll { 0% {transform: translateX(100%);} 100% {transform: translateX(-100%);} }
 .ticker-up { color: #00FF88; } .ticker-down { color: #FF4444; }
 .ticker-symbol { color: #FFF; font-weight: bold; }
-.tab-container { background-color: #141B2D; border: 1px solid #1E2638; 
-         border-radius: 4px; padding: 20px; margin-top: 20px; }
 #MainMenu, header, footer {visibility: hidden;}
 </style>
 """
@@ -109,20 +105,48 @@ def fetch_stock_detail(symbol):
     except:
         return None
 
+@st.cache_data(ttl=120)
+def fetch_options_chain(symbol):
+    try:
+        ticker = yf.Ticker(f"{symbol}.NS")
+        expirations = ticker.options
+        if not expirations:
+            return None
+        
+        exp_date = expirations[0]
+        opt_chain = ticker.option_chain(exp_date)
+        
+        calls = opt_chain.calls[['strike', 'lastPrice', 'bid', 'ask', 'volume', 'openInterest', 'impliedVolatility']].copy()
+        puts = opt_chain.puts[['strike', 'lastPrice', 'bid', 'ask', 'volume', 'openInterest', 'impliedVolatility']].copy()
+        
+        calls.columns = ['Strike', 'LTP', 'Bid', 'Ask', 'Volume', 'OI', 'IV']
+        puts.columns = ['Strike', 'LTP', 'Bid', 'Ask', 'Volume', 'OI', 'IV']
+        
+        spot = ticker.history(period='1d')['Close'].iloc[-1]
+        calls = calls[(calls['Strike'] >= spot * 0.9) & (calls['Strike'] <= spot * 1.1)]
+        puts = puts[(puts['Strike'] >= spot * 0.9) & (puts['Strike'] <= spot * 1.1)]
+        
+        return {
+            'calls': calls.sort_values('Strike'),
+            'puts': puts.sort_values('Strike'),
+            'expiry': exp_date,
+            'spot': round(spot, 2)
+        }
+    except:
+        return None
+
 def send_email_alert(subject, body, email_config):
     try:
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
         msg['Subject'] = subject
-        
         msg.attach(MIMEText(body, 'plain'))
         
         server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'])
         server.starttls()
         server.login(email_config['sender_email'], email_config['sender_password'])
-        text = msg.as_string()
-        server.sendmail(email_config['sender_email'], email_config['receiver_email'], text)
+        server.sendmail(email_config['sender_email'], email_config['receiver_email'], msg.as_string())
         server.quit()
         return True
     except Exception as e:
@@ -132,7 +156,6 @@ def send_email_alert(subject, body, email_config):
 def generate_ai_analysis(symbol, stock_data):
     try:
         client = Groq(api_key=st.session_state.get('groq_api_key'))
-        
         prompt = f"""Analyze this Indian stock for swing trading:
 Symbol: {symbol}
 Current Price: ₹{stock_data.get('CMP_Rs', 'N/A')}
@@ -155,18 +178,9 @@ Keep it under 150 words."""
             temperature=0.7,
             max_tokens=300
         )
-        
         return completion.choices[0].message.content
     except Exception as e:
         return f"AI Analysis unavailable: {str(e)}"
-
-def fetch_options_chain(symbol):
-    try:
-        nse = NsePython()
-        oc = nse.get_option_chain_stock(symbol)
-        return oc
-    except:
-        return None
 
 # ============================================================
 # HEADER
@@ -235,15 +249,13 @@ with st.sidebar:
             'smtp_server': 'smtp.gmail.com',
             'smtp_port': 587
         }
-        st.caption("💡 Use Gmail App Password: https://myaccount.google.com/apppasswords")
     
     st.markdown("---")
     st.markdown("#### 🤖 AI ANALYSIS")
-    st.session_state['groq_api_key'] = st.text_input("Groq API Key", type="password", 
-                                                      help="Get free key: https://console.groq.com")
+    st.session_state['groq_api_key'] = st.text_input("Groq API Key", type="password")
 
 # ============================================================
-# MAIN CONTENT WITH TABS
+# MAIN CONTENT
 # ============================================================
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
@@ -258,7 +270,7 @@ if uploaded_file is not None:
     filtered = filtered[filtered['Ret_1W'] <= max_1w]
     filtered = filtered.sort_values('YoY_NP_Growth_Pct', ascending=False)
     
-    # Fetch live data if enabled
+    # Fetch live data
     if live_mode and not filtered.empty:
         with st.spinner("📡 Fetching live data..."):
             symbols = filtered['Symbol'].head(30).tolist()
@@ -286,9 +298,7 @@ if uploaded_file is not None:
     # TABS
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 SCREENER", "🔍 STOCK DEEP DIVE", "💼 PORTFOLIO", "📈 OPTIONS CHAIN", "🤖 AI ANALYSIS"])
     
-    # ========================================================
     # TAB 1: SCREENER
-    # ========================================================
     with tab1:
         st.markdown("#### 📊 INSTITUTIONAL CONFLUENCE SCREENER")
         
@@ -349,7 +359,6 @@ if uploaded_file is not None:
             
             st.dataframe(styled, use_container_width=True, height=500)
             
-            # Email alert trigger
             if email_enabled and st.session_state.get('email_config', {}).get('sender_email'):
                 if st.button("📧 Send Watchlist Alert"):
                     subject = f"🎯 Quant Terminal: {len(filtered)} Setups Found"
@@ -360,9 +369,7 @@ if uploaded_file is not None:
                     if send_email_alert(subject, body, st.session_state['email_config']):
                         st.success("✅ Alert sent successfully!")
     
-    # ========================================================
     # TAB 2: STOCK DEEP DIVE
-    # ========================================================
     with tab2:
         st.markdown("#### 🔍 STOCK DEEP DIVE WITH NEWS")
         
@@ -397,7 +404,6 @@ if uploaded_file is not None:
                         )
                         st.plotly_chart(fig_line, use_container_width=True)
                     
-                    # News feed
                     if detail['news']:
                         st.markdown("##### 📰 LATEST NEWS")
                         for article in detail['news']:
@@ -405,16 +411,13 @@ if uploaded_file is not None:
                             st.caption(f"{article['publisher']} • {datetime.fromtimestamp(article['providerPublishTime']).strftime('%Y-%m-%d %H:%M')}")
                             st.markdown("---")
     
-    # ========================================================
-    # TAB 3: PORTFOLIO TRACKER
-    # ========================================================
+    # TAB 3: PORTFOLIO
     with tab3:
         st.markdown("#### 💼 PORTFOLIO TRACKER")
         
         if 'portfolio' not in st.session_state:
             st.session_state.portfolio = []
         
-        # Add position
         st.markdown("##### ADD POSITION")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -433,12 +436,9 @@ if uploaded_file is not None:
                 })
                 st.success(f"✅ Added {new_symbol}")
         
-        # Display portfolio
         if st.session_state.portfolio:
             st.markdown("##### CURRENT POSITIONS")
             portfolio_df = pd.DataFrame(st.session_state.portfolio)
-            
-            # Fetch live prices
             symbols = portfolio_df['Symbol'].tolist()
             live_prices = fetch_live_data(symbols)
             
@@ -450,12 +450,9 @@ if uploaded_file is not None:
                 portfolio_df['P&L_%'] = (portfolio_df['P&L'] / portfolio_df['Invested_Value']) * 100
                 
                 st.dataframe(portfolio_df.style.format({
-                    'Buy_Price': '₹{:,.2f}',
-                    'CMP_Live': '₹{:,.2f}',
-                    'Current_Value': '₹{:,.0f}',
-                    'Invested_Value': '₹{:,.0f}',
-                    'P&L': '₹{:,.0f}',
-                    'P&L_%': '{:+.2f}%'
+                    'Buy_Price': '₹{:,.2f}', 'CMP_Live': '₹{:,.2f}',
+                    'Current_Value': '₹{:,.0f}', 'Invested_Value': '₹{:,.0f}',
+                    'P&L': '₹{:,.0f}', 'P&L_%': '{:+.2f}%'
                 }), use_container_width=True)
                 
                 total_invested = portfolio_df['Invested_Value'].sum()
@@ -467,7 +464,6 @@ if uploaded_file is not None:
                 c2.metric("CURRENT VALUE", f"₹{total_current:,.0f}")
                 c3.metric("TOTAL P&L", f"₹{total_pnl:,.0f}", f"{(total_pnl/total_invested)*100:+.2f}%")
         
-        # Remove position
         if st.session_state.portfolio:
             st.markdown("##### REMOVE POSITION")
             remove_symbol = st.selectbox("Select Symbol to Remove", [p['Symbol'] for p in st.session_state.portfolio])
@@ -475,40 +471,69 @@ if uploaded_file is not None:
                 st.session_state.portfolio = [p for p in st.session_state.portfolio if p['Symbol'] != remove_symbol]
                 st.rerun()
     
-    # ========================================================
     # TAB 4: OPTIONS CHAIN
-    # ========================================================
     with tab4:
         st.markdown("#### 📈 OPTIONS CHAIN (F&O)")
         
-        fno_symbols = filtered[filtered['Symbol'].isin(['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK'])]['Symbol'].tolist() if not filtered.empty else []
+        fno_list = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 
+                   'SBIN', 'ITC', 'LT', 'HINDUNILVR', 'BAJFINANCE',
+                   'TATAMOTORS', 'MARUTI', 'SUNPHARMA', 'WIPRO', 'ADANIENT']
         
-        if fno_symbols:
-            oc_symbol = st.selectbox("Select F&O Symbol", fno_symbols)
-            
-            if oc_symbol:
-                with st.spinner(f"Fetching options chain for {oc_symbol}..."):
-                    oc_data = fetch_options_chain(oc_symbol)
+        oc_symbol = st.selectbox("Select F&O Symbol", fno_list, key="oc_select")
+        
+        if oc_symbol:
+            with st.spinner(f"Fetching options chain for {oc_symbol}..."):
+                oc_data = fetch_options_chain(oc_symbol)
+                
+                if oc_data:
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("SPOT PRICE", f"₹{oc_data['spot']:,.2f}")
+                    c2.metric("EXPIRY", oc_data['expiry'])
+                    c3.metric("PCR (OI)", f"{oc_data['puts']['OI'].sum() / max(oc_data['calls']['OI'].sum(), 1):.2f}")
                     
-                    if oc_data:
-                        st.markdown("##### CALL OPTIONS")
-                        st.dataframe(oc_data['calls'].head(10), use_container_width=True)
-                        
-                        st.markdown("##### PUT OPTIONS")
-                        st.dataframe(oc_data['puts'].head(10), use_container_width=True)
-                    else:
-                        st.warning("Could not fetch options chain. Symbol may not be in F&O segment.")
-        else:
-            st.info("No F&O symbols found in current watchlist. Add stocks like RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK to your data.")
+                    st.markdown("---")
+                    
+                    col_left, col_right = st.columns(2)
+                    
+                    with col_left:
+                        st.markdown("##### 🟢 CALLS")
+                        st.dataframe(
+                            oc_data['calls'].style.format({
+                                'Strike': '₹{:,.2f}', 'LTP': '₹{:,.2f}',
+                                'Bid': '₹{:,.2f}', 'Ask': '₹{:,.2f}',
+                                'Volume': '{:,.0f}', 'OI': '{:,.0f}', 'IV': '{:.2%}'
+                            }),
+                            use_container_width=True, height=400
+                        )
+                    
+                    with col_right:
+                        st.markdown("##### 🔴 PUTS")
+                        st.dataframe(
+                            oc_data['puts'].style.format({
+                                'Strike': '₹{:,.2f}', 'LTP': '₹{:,.2f}',
+                                'Bid': '₹{:,.2f}', 'Ask': '₹{:,.2f}',
+                                'Volume': '{:,.0f}', 'OI': '{:,.0f}', 'IV': '{:.2%}'
+                            }),
+                            use_container_width=True, height=400
+                        )
+                    
+                    st.markdown("##### 📊 KEY LEVELS")
+                    max_call_oi_strike = oc_data['calls'].loc[oc_data['calls']['OI'].idxmax(), 'Strike']
+                    max_put_oi_strike = oc_data['puts'].loc[oc_data['puts']['OI'].idxmax(), 'Strike']
+                    
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.metric("MAX CALL OI (Resistance)", f"₹{max_call_oi_strike:,.2f}")
+                    mc2.metric("MAX PUT OI (Support)", f"₹{max_put_oi_strike:,.2f}")
+                    mc3.metric("ATM STRIKE", f"₹{oc_data['spot']:,.2f}")
+                else:
+                    st.warning(f"⚠️ Could not fetch options chain for {oc_symbol}.")
     
-    # ========================================================
     # TAB 5: AI ANALYSIS
-    # ========================================================
     with tab5:
         st.markdown("#### 🤖 AI-POWERED STOCK ANALYSIS")
         
         if not st.session_state.get('groq_api_key'):
-            st.warning("⚠️ Please enter your Groq API Key in the sidebar to enable AI analysis.")
+            st.warning("⚠️ Please enter your Groq API Key in the sidebar.")
             st.markdown("**Get your free API key:** https://console.groq.com")
         else:
             ai_symbol = st.selectbox("Select Symbol for AI Analysis", 
