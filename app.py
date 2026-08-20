@@ -6,14 +6,21 @@ import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime, timedelta
 import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from groq import Groq
+from nsepython import NsePython
+import requests
+import json
 
 # ============================================================
 # PAGE CONFIG
 # ============================================================
-st.set_page_config(page_title="QUANT TERMINAL LIVE", layout="wide", page_icon="🟧")
+st.set_page_config(page_title="QUANT TERMINAL PRO", layout="wide", page_icon="🟧")
 
 # ============================================================
-# BLOOMBERG CSS (same as before - abbreviated for space)
+# BLOOMBERG CSS
 # ============================================================
 BLOOMBERG_CSS = """
 <style>
@@ -40,17 +47,18 @@ h1, h2, h3, h4 { color: #FF8C00 !important; font-family: 'Consolas', monospace !
 @keyframes scroll { 0% {transform: translateX(100%);} 100% {transform: translateX(-100%);} }
 .ticker-up { color: #00FF88; } .ticker-down { color: #FF4444; }
 .ticker-symbol { color: #FFF; font-weight: bold; }
+.tab-container { background-color: #141B2D; border: 1px solid #1E2638; 
+         border-radius: 4px; padding: 20px; margin-top: 20px; }
 #MainMenu, header, footer {visibility: hidden;}
 </style>
 """
 st.markdown(BLOOMBERG_CSS, unsafe_allow_html=True)
 
 # ============================================================
-# HELPER: FETCH LIVE DATA FROM YAHOO FINANCE
+# HELPER FUNCTIONS
 # ============================================================
-@st.cache_data(ttl=60)  # Cache for 60 seconds to avoid rate limits
+@st.cache_data(ttl=60)
 def fetch_live_data(symbols):
-    """Fetch live prices and calculate returns for a list of NSE symbols."""
     results = []
     for sym in symbols:
         try:
@@ -74,16 +82,16 @@ def fetch_live_data(symbols):
                 'Ret_1W_Live': round(ret_1w, 2),
                 'Ret_1M_Live': round(ret_1m, 2)
             })
-        except Exception as e:
+        except:
             continue
     return pd.DataFrame(results)
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)
 def fetch_stock_detail(symbol):
-    """Fetch detailed info for a single stock."""
     try:
         ticker = yf.Ticker(f"{symbol}.NS")
         info = ticker.info
+        news = ticker.news[:5] if ticker.news else []
         return {
             'name': info.get('longName', symbol),
             'sector': info.get('sector', 'N/A'),
@@ -95,8 +103,68 @@ def fetch_stock_detail(symbol):
             'div_yield': info.get('dividendYield', 0),
             '52w_high': info.get('fiftyTwoWeekHigh', 'N/A'),
             '52w_low': info.get('fiftyTwoWeekLow', 'N/A'),
-            'hist': ticker.history(period="6mo")
+            'hist': ticker.history(period="6mo"),
+            'news': news
         }
+    except:
+        return None
+
+def send_email_alert(subject, body, email_config):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = email_config['sender_email']
+        msg['To'] = email_config['receiver_email']
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'])
+        server.starttls()
+        server.login(email_config['sender_email'], email_config['sender_password'])
+        text = msg.as_string()
+        server.sendmail(email_config['sender_email'], email_config['receiver_email'], text)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Email failed: {str(e)}")
+        return False
+
+def generate_ai_analysis(symbol, stock_data):
+    try:
+        client = Groq(api_key=st.session_state.get('groq_api_key'))
+        
+        prompt = f"""Analyze this Indian stock for swing trading:
+Symbol: {symbol}
+Current Price: ₹{stock_data.get('CMP_Rs', 'N/A')}
+Market Cap: ₹{stock_data.get('MarCap_Cr', 'N/A')} Cr
+1M Return: {stock_data.get('Ret_1M', 'N/A')}%
+YoY Revenue Growth: {stock_data.get('YoY_Rev_Growth_Pct', 'N/A')}%
+YoY Profit Growth: {stock_data.get('YoY_NP_Growth_Pct', 'N/A')}%
+Net Margin: {stock_data.get('NetMargin_Jun26_Pct', 'N/A')}%
+
+Provide a concise 3-point analysis:
+1. Technical outlook (momentum, trend)
+2. Fundamental strength (growth, margins)
+3. Risk factors and recommendation
+
+Keep it under 150 words."""
+        
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=300
+        )
+        
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"AI Analysis unavailable: {str(e)}"
+
+def fetch_options_chain(symbol):
+    try:
+        nse = NsePython()
+        oc = nse.get_option_chain_stock(symbol)
+        return oc
     except:
         return None
 
@@ -110,10 +178,10 @@ st.markdown(f"""
     <div style='display: flex; justify-content: space-between; align-items: center;'>
         <div>
             <h1 style='margin: 0; color: #FF8C00; font-size: 1.8rem; letter-spacing: 3px;'>
-                ▌QUANT TERMINAL <span style='color:#00FF88;'>LIVE</span>
+                ▌QUANT TERMINAL <span style='color:#00FF88;'>PRO</span>
             </h1>
             <div style='color: #8892A8; font-size: 0.75rem; letter-spacing: 2px;'>
-                REAL-TIME NSE DATA • YAHOO FINANCE API • v3.0
+                INSTITUTIONAL TRADING DESK • AI + LIVE DATA + F&O • v4.0
             </div>
         </div>
         <div style='text-align: right;'>
@@ -135,8 +203,7 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("#### 📡 LIVE DATA MODE")
-    live_mode = st.toggle("Enable Live Prices (yfinance)", value=True, 
-                          help="Fetches real-time NSE prices. Slower but accurate.")
+    live_mode = st.toggle("Enable Live Prices", value=True)
     auto_refresh = st.toggle("Auto-Refresh (60s)", value=False)
     
     if auto_refresh and live_mode:
@@ -156,15 +223,33 @@ with st.sidebar:
     capital = st.number_input("Total Capital (₹)", value=500000, step=50000)
     risk_pct = st.slider("Risk per Trade (%)", 0.5, 5.0, 1.5, step=0.5)
     stop_loss_pct = st.slider("Stop Loss (%)", 2.0, 15.0, 5.0, step=0.5)
+    
+    st.markdown("---")
+    st.markdown("#### 📧 EMAIL ALERTS")
+    email_enabled = st.toggle("Enable Email Alerts", value=False)
+    if email_enabled:
+        st.session_state['email_config'] = {
+            'sender_email': st.text_input("Sender Email (Gmail)"),
+            'sender_password': st.text_input("App Password", type="password"),
+            'receiver_email': st.text_input("Receiver Email"),
+            'smtp_server': 'smtp.gmail.com',
+            'smtp_port': 587
+        }
+        st.caption("💡 Use Gmail App Password: https://myaccount.google.com/apppasswords")
+    
+    st.markdown("---")
+    st.markdown("#### 🤖 AI ANALYSIS")
+    st.session_state['groq_api_key'] = st.text_input("Groq API Key", type="password", 
+                                                      help="Get free key: https://console.groq.com")
 
 # ============================================================
-# MAIN CONTENT
+# MAIN CONTENT WITH TABS
 # ============================================================
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     df = df.replace(['ERROR:#N/A', '#N/A', 'N/A', 'inf', '-inf'], np.nan)
     
-    # Apply fundamental filters
+    # Apply filters
     filtered = df[df['MarCap_Cr'] >= min_mcap].copy()
     if require_leverage:
         filtered = filtered[filtered['YoY_NP_Growth_Pct'] > filtered['YoY_Rev_Growth_Pct']]
@@ -173,18 +258,13 @@ if uploaded_file is not None:
     filtered = filtered[filtered['Ret_1W'] <= max_1w]
     filtered = filtered.sort_values('YoY_NP_Growth_Pct', ascending=False)
     
-    # ========================================================
-    # LIVE DATA INTEGRATION
-    # ========================================================
+    # Fetch live data if enabled
     if live_mode and not filtered.empty:
-        with st.spinner("📡 Fetching live NSE prices..."):
-            symbols = filtered['Symbol'].head(30).tolist()  # Limit to avoid rate limits
+        with st.spinner("📡 Fetching live data..."):
+            symbols = filtered['Symbol'].head(30).tolist()
             live_df = fetch_live_data(symbols)
-            
             if not live_df.empty:
-                # Merge live data with fundamental data
                 filtered = filtered.merge(live_df, on='Symbol', how='left')
-                # Override returns with live data where available
                 for col in ['Ret_1D', 'Ret_1W', 'Ret_1M']:
                     live_col = f"{col}_Live"
                     if live_col in filtered.columns:
@@ -192,19 +272,7 @@ if uploaded_file is not None:
                 if 'CMP_Live' in filtered.columns:
                     filtered['CMP_Rs'] = filtered['CMP_Live'].fillna(filtered['CMP_Rs'])
     
-    # ========================================================
-    # METRIC CARDS
-    # ========================================================
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("SETUPS", len(filtered))
-    c2.metric("LIVE FEED", "🟢 ACTIVE" if live_mode else "⚪ OFFLINE")
-    c3.metric("AVG NP GROWTH", f"{filtered['YoY_NP_Growth_Pct'].mean():.1f}%" if not filtered.empty else "—")
-    c4.metric("TOP GAINER", filtered['Ret_1M'].max() if not filtered.empty else 0)
-    c5.metric("UNIVERSE", len(df))
-    
-    # ========================================================
-    # TICKER TAPE (Live Top Movers)
-    # ========================================================
+    # Ticker tape
     if not filtered.empty:
         top_movers = filtered.nlargest(10, 'Ret_1M')[['Symbol', 'Ret_1M']].values.tolist()
         ticker_html = "<div class='ticker-tape'><div class='ticker-content'>"
@@ -215,87 +283,102 @@ if uploaded_file is not None:
         ticker_html += "</div></div>"
         st.markdown(ticker_html, unsafe_allow_html=True)
     
-    st.markdown("<br>")
+    # TABS
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 SCREENER", "🔍 STOCK DEEP DIVE", "💼 PORTFOLIO", "📈 OPTIONS CHAIN", "🤖 AI ANALYSIS"])
     
     # ========================================================
-    # CHARTS
+    # TAB 1: SCREENER
     # ========================================================
-    left, right = st.columns([1.2, 1])
-    
-    with left:
-        st.markdown("#### 📊 MOMENTUM vs FUNDAMENTALS")
+    with tab1:
+        st.markdown("#### 📊 INSTITUTIONAL CONFLUENCE SCREENER")
+        
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("SETUPS", len(filtered))
+        c2.metric("LIVE FEED", "🟢 ACTIVE" if live_mode else "⚪ OFFLINE")
+        c3.metric("AVG NP GROWTH", f"{filtered['YoY_NP_Growth_Pct'].mean():.1f}%" if not filtered.empty else "—")
+        c4.metric("TOP GAINER", f"{filtered['Ret_1M'].max():.1f}%" if not filtered.empty else "—")
+        c5.metric("UNIVERSE", len(df))
+        
+        left, right = st.columns([1.2, 1])
+        
+        with left:
+            st.markdown("##### MOMENTUM vs FUNDAMENTALS")
+            if not filtered.empty:
+                fig = px.scatter(filtered, x='Ret_1M', y='YoY_NP_Growth_Pct',
+                               size='MarCap_Cr', color='Industry', hover_name='Symbol',
+                               size_max=40, color_discrete_sequence=px.colors.qualitative.Bold)
+                fig.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
+                                font=dict(family='Consolas', color='#8892A8'),
+                                xaxis=dict(gridcolor='#1E2638'), yaxis=dict(gridcolor='#1E2638'),
+                                height=420)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with right:
+            st.markdown("##### SECTOR HEATMAP")
+            if not filtered.empty:
+                sector = filtered.groupby('Industry')['Ret_1M'].mean().sort_values(ascending=True)
+                fig_h = go.Figure(go.Heatmap(
+                    z=sector.values.reshape(-1, 1), x=['1M Avg'], y=sector.index,
+                    colorscale=[[0, '#1E2638'], [0.5, '#FF8C00'], [1, '#00FF88']],
+                    showscale=False, text=[[f"{v:.1f}%"] for v in sector.values],
+                    texttemplate="%{text}", textfont=dict(size=11, color='white')
+                ))
+                fig_h.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
+                                  height=420, margin=dict(l=10, r=10, t=10, b=10))
+                st.plotly_chart(fig_h, use_container_width=True)
+        
+        st.markdown("##### WATCHLIST")
         if not filtered.empty:
-            fig = px.scatter(filtered, x='Ret_1M', y='YoY_NP_Growth_Pct',
-                           size='MarCap_Cr', color='Industry', hover_name='Symbol',
-                           size_max=40, color_discrete_sequence=px.colors.qualitative.Bold)
-            fig.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
-                            font=dict(family='Consolas', color='#8892A8'),
-                            xaxis=dict(gridcolor='#1E2638'), yaxis=dict(gridcolor='#1E2638'),
-                            height=420)
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with right:
-        st.markdown("#### 🌡️ SECTOR HEATMAP")
-        if not filtered.empty:
-            sector = filtered.groupby('Industry')['Ret_1M'].mean().sort_values(ascending=True)
-            fig_h = go.Figure(go.Heatmap(
-                z=sector.values.reshape(-1, 1), x=['1M Avg'], y=sector.index,
-                colorscale=[[0, '#1E2638'], [0.5, '#FF8C00'], [1, '#00FF88']],
-                showscale=False, text=[[f"{v:.1f}%"] for v in sector.values],
-                texttemplate="%{text}", textfont=dict(size=11, color='white')
-            ))
-            fig_h.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
-                              height=420, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig_h, use_container_width=True)
+            display_cols = ['Symbol', 'Industry', 'CMP_Rs', 'MarCap_Cr', 
+                           'YoY_NP_Growth_Pct', 'Ret_1M', 'Ret_1W', 'Ret_1D']
+            display_df = filtered[display_cols].copy()
+            
+            def color_returns(val):
+                if pd.isna(val): return ''
+                if val > 5: return 'color: #00FF88; font-weight: bold'
+                elif val > 0: return 'color: #00FF88'
+                elif val < -3: return 'color: #FF4444; font-weight: bold'
+                elif val < 0: return 'color: #FF4444'
+                return 'color: #8892A8'
+            
+            styled = display_df.style.format({
+                'CMP_Rs': '₹{:,.2f}', 'MarCap_Cr': '₹{:,.0f}',
+                'YoY_NP_Growth_Pct': '{:+.1f}%',
+                'Ret_1M': '{:+.2f}%', 'Ret_1W': '{:+.2f}%', 'Ret_1D': '{:+.2f}%'
+            }).map(color_returns, subset=['Ret_1M', 'Ret_1W', 'Ret_1D', 'YoY_NP_Growth_Pct'])
+            
+            st.dataframe(styled, use_container_width=True, height=500)
+            
+            # Email alert trigger
+            if email_enabled and st.session_state.get('email_config', {}).get('sender_email'):
+                if st.button("📧 Send Watchlist Alert"):
+                    subject = f"🎯 Quant Terminal: {len(filtered)} Setups Found"
+                    body = f"Top 5 setups:\n\n"
+                    for _, row in filtered.head(5).iterrows():
+                        body += f"{row['Symbol']} | {row['Industry']} | NP Growth: {row['YoY_NP_Growth_Pct']:.1f}% | 1M: {row['Ret_1M']:.2f}%\n"
+                    
+                    if send_email_alert(subject, body, st.session_state['email_config']):
+                        st.success("✅ Alert sent successfully!")
     
     # ========================================================
-    # WATCHLIST TABLE
+    # TAB 2: STOCK DEEP DIVE
     # ========================================================
-    st.markdown("#### 📋 LIVE WATCHLIST")
-    
-    if not filtered.empty:
-        display_cols = ['Symbol', 'Industry', 'CMP_Rs', 'MarCap_Cr', 
-                       'YoY_NP_Growth_Pct', 'Ret_1M', 'Ret_1W', 'Ret_1D']
+    with tab2:
+        st.markdown("#### 🔍 STOCK DEEP DIVE WITH NEWS")
         
-        display_df = filtered[display_cols].copy()
-        
-        def color_returns(val):
-            if pd.isna(val): return ''
-            if val > 5: return 'color: #00FF88; font-weight: bold'
-            elif val > 0: return 'color: #00FF88'
-            elif val < -3: return 'color: #FF4444; font-weight: bold'
-            elif val < 0: return 'color: #FF4444'
-            return 'color: #8892A8'
-        
-        styled = display_df.style.format({
-            'CMP_Rs': '₹{:,.2f}', 'MarCap_Cr': '₹{:,.0f}',
-            'YoY_NP_Growth_Pct': '{:+.1f}%',
-            'Ret_1M': '{:+.2f}%', 'Ret_1W': '{:+.2f}%', 'Ret_1D': '{:+.2f}%'
-        }).map(color_returns, subset=['Ret_1M', 'Ret_1W', 'Ret_1D', 'YoY_NP_Growth_Pct'])
-        
-        st.dataframe(styled, use_container_width=True, height=500)
-        
-        # ====================================================
-        # STOCK DETAIL PANEL (NEW!)
-        # ====================================================
-        st.markdown("---")
-        st.markdown("#### 🔍 STOCK DEEP DIVE (Click a Symbol)")
-        
-        selected = st.selectbox("Select Symbol for Analysis", 
-                               filtered['Symbol'].tolist(), index=0)
+        selected = st.selectbox("Select Symbol", filtered['Symbol'].tolist() if not filtered.empty else [], index=0)
         
         if selected:
             with st.spinner(f"Loading {selected}..."):
                 detail = fetch_stock_detail(selected)
                 if detail:
                     col_a, col_b, col_c, col_d, col_e = st.columns(5)
-                    col_a.metric("P/E RATIO", f"{detail['pe']:.2f}" if isinstance(detail['pe'], (int, float)) else "N/A")
-                    col_b.metric("P/B RATIO", f"{detail['pb']:.2f}" if isinstance(detail['pb'], (int, float)) else "N/A")
+                    col_a.metric("P/E", f"{detail['pe']:.2f}" if isinstance(detail['pe'], (int, float)) else "N/A")
+                    col_b.metric("P/B", f"{detail['pb']:.2f}" if isinstance(detail['pb'], (int, float)) else "N/A")
                     col_c.metric("ROE", f"{detail['roe']*100:.1f}%" if isinstance(detail['roe'], (int, float)) else "N/A")
                     col_d.metric("52W HIGH", f"₹{detail['52w_high']:,.2f}" if isinstance(detail['52w_high'], (int, float)) else "N/A")
                     col_e.metric("52W LOW", f"₹{detail['52w_low']:,.2f}" if isinstance(detail['52w_low'], (int, float)) else "N/A")
                     
-                    # 6-month price chart
                     hist = detail['hist']
                     if not hist.empty:
                         fig_line = go.Figure()
@@ -313,27 +396,140 @@ if uploaded_file is not None:
                             title=f"{selected} • 6-MONTH PRICE ACTION"
                         )
                         st.plotly_chart(fig_line, use_container_width=True)
-                else:
-                    st.warning(f"Could not fetch live data for {selected}. Symbol may not be listed on NSE.")
-        
-        # ====================================================
-        # POSITION SIZER
-        # ====================================================
-        st.markdown("---")
-        st.markdown("#### 💼 RISK MANAGEMENT")
-        risk_amount = capital * (risk_pct / 100)
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("MAX RISK ₹", f"₹{risk_amount:,.0f}")
-        col_b.metric("STOP LOSS", f"{stop_loss_pct}%")
-        col_c.metric("MAX POSITION SIZE", f"₹{risk_amount / (stop_loss_pct/100):,.0f}")
+                    
+                    # News feed
+                    if detail['news']:
+                        st.markdown("##### 📰 LATEST NEWS")
+                        for article in detail['news']:
+                            st.markdown(f"**[{article['title']}]({article['link']})**")
+                            st.caption(f"{article['publisher']} • {datetime.fromtimestamp(article['providerPublishTime']).strftime('%Y-%m-%d %H:%M')}")
+                            st.markdown("---")
     
     # ========================================================
-    # STATUS BAR
+    # TAB 3: PORTFOLIO TRACKER
     # ========================================================
+    with tab3:
+        st.markdown("#### 💼 PORTFOLIO TRACKER")
+        
+        if 'portfolio' not in st.session_state:
+            st.session_state.portfolio = []
+        
+        # Add position
+        st.markdown("##### ADD POSITION")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            new_symbol = st.text_input("Symbol")
+        with col2:
+            new_qty = st.number_input("Quantity", min_value=1, value=10)
+        with col3:
+            new_buy_price = st.number_input("Buy Price (₹)", min_value=0.0, value=100.0)
+        with col4:
+            if st.button("➕ Add Position"):
+                st.session_state.portfolio.append({
+                    'Symbol': new_symbol,
+                    'Quantity': new_qty,
+                    'Buy_Price': new_buy_price,
+                    'Date': datetime.now().strftime('%Y-%m-%d')
+                })
+                st.success(f"✅ Added {new_symbol}")
+        
+        # Display portfolio
+        if st.session_state.portfolio:
+            st.markdown("##### CURRENT POSITIONS")
+            portfolio_df = pd.DataFrame(st.session_state.portfolio)
+            
+            # Fetch live prices
+            symbols = portfolio_df['Symbol'].tolist()
+            live_prices = fetch_live_data(symbols)
+            
+            if not live_prices.empty:
+                portfolio_df = portfolio_df.merge(live_prices[['Symbol', 'CMP_Live']], on='Symbol', how='left')
+                portfolio_df['Current_Value'] = portfolio_df['Quantity'] * portfolio_df['CMP_Live']
+                portfolio_df['Invested_Value'] = portfolio_df['Quantity'] * portfolio_df['Buy_Price']
+                portfolio_df['P&L'] = portfolio_df['Current_Value'] - portfolio_df['Invested_Value']
+                portfolio_df['P&L_%'] = (portfolio_df['P&L'] / portfolio_df['Invested_Value']) * 100
+                
+                st.dataframe(portfolio_df.style.format({
+                    'Buy_Price': '₹{:,.2f}',
+                    'CMP_Live': '₹{:,.2f}',
+                    'Current_Value': '₹{:,.0f}',
+                    'Invested_Value': '₹{:,.0f}',
+                    'P&L': '₹{:,.0f}',
+                    'P&L_%': '{:+.2f}%'
+                }), use_container_width=True)
+                
+                total_invested = portfolio_df['Invested_Value'].sum()
+                total_current = portfolio_df['Current_Value'].sum()
+                total_pnl = portfolio_df['P&L'].sum()
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("TOTAL INVESTED", f"₹{total_invested:,.0f}")
+                c2.metric("CURRENT VALUE", f"₹{total_current:,.0f}")
+                c3.metric("TOTAL P&L", f"₹{total_pnl:,.0f}", f"{(total_pnl/total_invested)*100:+.2f}%")
+        
+        # Remove position
+        if st.session_state.portfolio:
+            st.markdown("##### REMOVE POSITION")
+            remove_symbol = st.selectbox("Select Symbol to Remove", [p['Symbol'] for p in st.session_state.portfolio])
+            if st.button("🗑️ Remove"):
+                st.session_state.portfolio = [p for p in st.session_state.portfolio if p['Symbol'] != remove_symbol]
+                st.rerun()
+    
+    # ========================================================
+    # TAB 4: OPTIONS CHAIN
+    # ========================================================
+    with tab4:
+        st.markdown("#### 📈 OPTIONS CHAIN (F&O)")
+        
+        fno_symbols = filtered[filtered['Symbol'].isin(['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK'])]['Symbol'].tolist() if not filtered.empty else []
+        
+        if fno_symbols:
+            oc_symbol = st.selectbox("Select F&O Symbol", fno_symbols)
+            
+            if oc_symbol:
+                with st.spinner(f"Fetching options chain for {oc_symbol}..."):
+                    oc_data = fetch_options_chain(oc_symbol)
+                    
+                    if oc_data:
+                        st.markdown("##### CALL OPTIONS")
+                        st.dataframe(oc_data['calls'].head(10), use_container_width=True)
+                        
+                        st.markdown("##### PUT OPTIONS")
+                        st.dataframe(oc_data['puts'].head(10), use_container_width=True)
+                    else:
+                        st.warning("Could not fetch options chain. Symbol may not be in F&O segment.")
+        else:
+            st.info("No F&O symbols found in current watchlist. Add stocks like RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK to your data.")
+    
+    # ========================================================
+    # TAB 5: AI ANALYSIS
+    # ========================================================
+    with tab5:
+        st.markdown("#### 🤖 AI-POWERED STOCK ANALYSIS")
+        
+        if not st.session_state.get('groq_api_key'):
+            st.warning("⚠️ Please enter your Groq API Key in the sidebar to enable AI analysis.")
+            st.markdown("**Get your free API key:** https://console.groq.com")
+        else:
+            ai_symbol = st.selectbox("Select Symbol for AI Analysis", 
+                                    filtered['Symbol'].tolist() if not filtered.empty else [], 
+                                    key="ai_select")
+            
+            if ai_symbol:
+                stock_row = filtered[filtered['Symbol'] == ai_symbol].iloc[0] if not filtered.empty else None
+                
+                if stock_row is not None:
+                    if st.button("🧠 Generate AI Analysis"):
+                        with st.spinner("Analyzing with AI..."):
+                            analysis = generate_ai_analysis(ai_symbol, stock_row.to_dict())
+                            st.markdown("##### ANALYSIS RESULT")
+                            st.markdown(analysis)
+    
+    # STATUS BAR
     st.markdown(f"""
     <div class='status-bar'>
-        <div><span class='status-indicator'></span>LIVE: {'ON' if live_mode else 'OFF'} | SYMBOLS: {len(df)} | FILTERED: {len(filtered)}</div>
-        <div>QUANT TERMINAL v3.0 • yfinance API • © 2026</div>
+        <div><span class='status-indicator'></span>LIVE: {'ON' if live_mode else 'OFF'} | AI: {'ON' if st.session_state.get('groq_api_key') else 'OFF'} | SYMBOLS: {len(df)} | FILTERED: {len(filtered)}</div>
+        <div>QUANT TERMINAL PRO v4.0 • © 2026</div>
     </div>
     """, unsafe_allow_html=True)
 
