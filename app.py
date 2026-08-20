@@ -10,45 +10,187 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from groq import Groq
-import requests
 
 # ============================================================
 # PAGE CONFIG
 # ============================================================
-st.set_page_config(page_title="QUANT TERMINAL PRO", layout="wide", page_icon="🟧")
+st.set_page_config(page_title="Quant Terminal", layout="wide", page_icon="📊")
 
 # ============================================================
-# BLOOMBERG CSS
+# APPLE-STYLE CSS
 # ============================================================
-BLOOMBERG_CSS = """
+APPLE_CSS = """
 <style>
-.stApp { background-color: #0A0E1A !important; color: #E8EAF0 !important; 
-         font-family: 'Consolas', monospace !important; }
-section[data-testid="stSidebar"] { background-color: #0F1420 !important; 
-         border-right: 1px solid #1E2638 !important; }
-h1, h2, h3, h4 { color: #FF8C00 !important; font-family: 'Consolas', monospace !important; }
-[data-testid="stMetric"] { background-color: #141B2D; border: 1px solid #1E2638; 
-         border-left: 3px solid #FF8C00; border-radius: 4px; padding: 12px; }
-[data-testid="stMetricLabel"] { color: #8892A8 !important; font-size: 0.75rem !important; 
-         text-transform: uppercase !important; letter-spacing: 1px !important; }
-[data-testid="stMetricValue"] { color: #FFFFFF !important; font-size: 1.5rem !important; 
-         font-weight: bold !important; }
-.status-bar { background-color: #0F1420; border-top: 1px solid #1E2638; 
-         padding: 8px 16px; font-size: 0.8rem; color: #8892A8; 
-         display: flex; justify-content: space-between; }
-.status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; 
-         background-color: #00FF88; margin-right: 8px; animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100% {opacity:1;} 50% {opacity:0.4;} }
-.ticker-tape { background-color: #000; border-bottom: 2px solid #FF8C00; 
-         padding: 6px 0; overflow: hidden; white-space: nowrap; font-size: 0.85rem; }
-.ticker-content { display: inline-block; animation: scroll 40s linear infinite; }
-@keyframes scroll { 0% {transform: translateX(100%);} 100% {transform: translateX(-100%);} }
-.ticker-up { color: #00FF88; } .ticker-down { color: #FF4444; }
-.ticker-symbol { color: #FFF; font-weight: bold; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* GLOBAL */
+.stApp {
+    background: linear-gradient(180deg, #FBFBFD 0%, #F5F5F7 100%);
+    color: #1D1D1F;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* SIDEBAR */
+section[data-testid="stSidebar"] {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* HEADERS */
+h1 {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: #1D1D1F;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+}
+h2, h3, h4 {
+    font-weight: 600;
+    color: #1D1D1F;
+    letter-spacing: -0.01em;
+}
+
+/* METRIC CARDS */
+[data-testid="stMetric"] {
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
+}
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+[data-testid="stMetricLabel"] {
+    color: #86868B;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+[data-testid="stMetricValue"] {
+    color: #1D1D1F;
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+/* BUTTONS */
+.stButton > button {
+    background: linear-gradient(180deg, #007AFF 0%, #0051D5 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+.stButton > button:hover {
+    background: linear-gradient(180deg, #0051D5 0%, #003D99 100%);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+/* DATAFRAME */
+[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* TABS */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+    padding: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    color: #86868B;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+.stTabs [aria-selected="true"] {
+    background: white;
+    color: #007AFF;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* SLIDERS */
+.stSlider > div > div > div {
+    background: #007AFF;
+}
+
+/* SELECTBOX */
+.stSelectbox > div > div {
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* HERO SECTION */
+.hero-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 24px;
+    padding: 48px;
+    margin-bottom: 32px;
+    color: white;
+    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+}
+.hero-title {
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+}
+.hero-subtitle {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+/* CARDS */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    margin-bottom: 16px;
+}
+
+/* STATUS INDICATOR */
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #34C759;
+    margin-right: 8px;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* HIDE STREAMLIT BRANDING */
 #MainMenu, header, footer {visibility: hidden;}
+
+/* SMOOTH SCROLLING */
+html {
+    scroll-behavior: smooth;
+}
 </style>
 """
-st.markdown(BLOOMBERG_CSS, unsafe_allow_html=True)
+st.markdown(APPLE_CSS, unsafe_allow_html=True)
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -183,28 +325,14 @@ Keep it under 150 words."""
         return f"AI Analysis unavailable: {str(e)}"
 
 # ============================================================
-# HEADER
+# HERO HEADER
 # ============================================================
-now = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST")
+now = datetime.now().strftime("%B %d, %Y")
+
 st.markdown(f"""
-<div style='background: linear-gradient(90deg, #0A0E1A 0%, #141B2D 100%); 
-            padding: 20px; border-bottom: 2px solid #FF8C00;'>
-    <div style='display: flex; justify-content: space-between; align-items: center;'>
-        <div>
-            <h1 style='margin: 0; color: #FF8C00; font-size: 1.8rem; letter-spacing: 3px;'>
-                ▌QUANT TERMINAL <span style='color:#00FF88;'>PRO</span>
-            </h1>
-            <div style='color: #8892A8; font-size: 0.75rem; letter-spacing: 2px;'>
-                INSTITUTIONAL TRADING DESK • AI + LIVE DATA + F&O • v4.0
-            </div>
-        </div>
-        <div style='text-align: right;'>
-            <div style='color: #00FF88; font-size: 0.85rem;'>
-                <span class='status-indicator'></span>LIVE FEED ACTIVE
-            </div>
-            <div style='color: #8892A8; font-size: 0.75rem;'>{now}</div>
-        </div>
-    </div>
+<div class='hero-section'>
+    <div class='hero-title'>Quant Terminal</div>
+    <div class='hero-subtitle'>Institutional-grade swing trading • {now}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -212,11 +340,11 @@ st.markdown(f"""
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-    st.markdown("### ⌨️ COMMAND PALETTE")
-    uploaded_file = st.file_uploader("📂 LOAD FUNDAMENTAL DATA", type=['xlsx'])
+    st.markdown("## Settings")
+    uploaded_file = st.file_uploader("Upload Data", type=['xlsx'])
     
     st.markdown("---")
-    st.markdown("#### 📡 LIVE DATA MODE")
+    st.markdown("### Live Data")
     live_mode = st.toggle("Enable Live Prices", value=True)
     auto_refresh = st.toggle("Auto-Refresh (60s)", value=False)
     
@@ -225,7 +353,7 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
-    st.markdown("#### 🎯 FILTERS")
+    st.markdown("### Filters")
     min_mcap = st.slider("Min Market Cap (₹ Cr)", 0, 100000, 2000, step=500)
     min_margin = st.slider("Min Net Margin (%)", 0, 50, 5)
     min_1m = st.slider("Min 1M Return (%)", 0, 100, 15)
@@ -233,17 +361,17 @@ with st.sidebar:
     require_leverage = st.checkbox("Require Operating Leverage", value=True)
     
     st.markdown("---")
-    st.markdown("#### 💼 POSITION SIZER")
+    st.markdown("### Position Sizer")
     capital = st.number_input("Total Capital (₹)", value=500000, step=50000)
     risk_pct = st.slider("Risk per Trade (%)", 0.5, 5.0, 1.5, step=0.5)
     stop_loss_pct = st.slider("Stop Loss (%)", 2.0, 15.0, 5.0, step=0.5)
     
     st.markdown("---")
-    st.markdown("#### 📧 EMAIL ALERTS")
+    st.markdown("### Email Alerts")
     email_enabled = st.toggle("Enable Email Alerts", value=False)
     if email_enabled:
         st.session_state['email_config'] = {
-            'sender_email': st.text_input("Sender Email (Gmail)"),
+            'sender_email': st.text_input("Sender Email"),
             'sender_password': st.text_input("App Password", type="password"),
             'receiver_email': st.text_input("Receiver Email"),
             'smtp_server': 'smtp.gmail.com',
@@ -251,8 +379,8 @@ with st.sidebar:
         }
     
     st.markdown("---")
-    st.markdown("#### 🤖 AI ANALYSIS")
-    st.session_state['groq_api_key'] = st.text_input("Groq API Key", type="password")
+    st.markdown("### AI Analysis")
+    st.session_state['groq_api_key'] = st.text_input("Groq API Key", type="password", help="Get free key: https://console.groq.com")
 
 # ============================================================
 # MAIN CONTENT
@@ -272,7 +400,7 @@ if uploaded_file is not None:
     
     # Fetch live data
     if live_mode and not filtered.empty:
-        with st.spinner("📡 Fetching live data..."):
+        with st.spinner("Fetching live data..."):
             symbols = filtered['Symbol'].head(30).tolist()
             live_df = fetch_live_data(symbols)
             if not live_df.empty:
@@ -284,60 +412,67 @@ if uploaded_file is not None:
                 if 'CMP_Live' in filtered.columns:
                     filtered['CMP_Rs'] = filtered['CMP_Live'].fillna(filtered['CMP_Rs'])
     
-    # Ticker tape
-    if not filtered.empty:
-        top_movers = filtered.nlargest(10, 'Ret_1M')[['Symbol', 'Ret_1M']].values.tolist()
-        ticker_html = "<div class='ticker-tape'><div class='ticker-content'>"
-        for sym, ret in top_movers:
-            color_class = 'ticker-up' if ret > 0 else 'ticker-down'
-            arrow = '▲' if ret > 0 else '▼'
-            ticker_html += f"<span class='ticker-symbol'>{sym}</span> <span class='{color_class}'>{arrow}{ret:.2f}%</span> │ "
-        ticker_html += "</div></div>"
-        st.markdown(ticker_html, unsafe_allow_html=True)
+    # ========================================================
+    # METRIC CARDS
+    # ========================================================
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Setups Found", len(filtered))
+    col2.metric("Live Feed", "Active" if live_mode else "Offline")
+    col3.metric("Avg NP Growth", f"{filtered['YoY_NP_Growth_Pct'].mean():.1f}%" if not filtered.empty else "—")
+    col4.metric("Top Gainer", f"{filtered['Ret_1M'].max():.1f}%" if not filtered.empty else "—")
+    col5.metric("Universe", len(df))
+    
+    st.markdown("---")
     
     # TABS
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 SCREENER", "🔍 STOCK DEEP DIVE", "💼 PORTFOLIO", "📈 OPTIONS CHAIN", "🤖 AI ANALYSIS"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Screener", "🔍 Stock Details", "💼 Portfolio", "📈 Options", "🤖 AI Analysis"])
     
     # TAB 1: SCREENER
     with tab1:
-        st.markdown("#### 📊 INSTITUTIONAL CONFLUENCE SCREENER")
-        
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("SETUPS", len(filtered))
-        c2.metric("LIVE FEED", "🟢 ACTIVE" if live_mode else "⚪ OFFLINE")
-        c3.metric("AVG NP GROWTH", f"{filtered['YoY_NP_Growth_Pct'].mean():.1f}%" if not filtered.empty else "—")
-        c4.metric("TOP GAINER", f"{filtered['Ret_1M'].max():.1f}%" if not filtered.empty else "—")
-        c5.metric("UNIVERSE", len(df))
+        st.markdown("### Institutional Confluence Screener")
         
         left, right = st.columns([1.2, 1])
         
         with left:
-            st.markdown("##### MOMENTUM vs FUNDAMENTALS")
+            st.markdown("#### Momentum vs Fundamentals")
             if not filtered.empty:
                 fig = px.scatter(filtered, x='Ret_1M', y='YoY_NP_Growth_Pct',
                                size='MarCap_Cr', color='Industry', hover_name='Symbol',
-                               size_max=40, color_discrete_sequence=px.colors.qualitative.Bold)
-                fig.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
-                                font=dict(family='Consolas', color='#8892A8'),
-                                xaxis=dict(gridcolor='#1E2638'), yaxis=dict(gridcolor='#1E2638'),
-                                height=420)
+                               size_max=40, color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig.update_layout(
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    font=dict(family='Inter', color='#1D1D1F'),
+                    xaxis=dict(gridcolor='rgba(0,0,0,0.05)', title='1M Return (%)'),
+                    yaxis=dict(gridcolor='rgba(0,0,0,0.05)', title='YoY NP Growth (%)'),
+                    height=450,
+                    margin=dict(l=40, r=20, t=20, b=40)
+                )
                 st.plotly_chart(fig, use_container_width=True)
         
         with right:
-            st.markdown("##### SECTOR HEATMAP")
+            st.markdown("#### Sector Performance")
             if not filtered.empty:
                 sector = filtered.groupby('Industry')['Ret_1M'].mean().sort_values(ascending=True)
-                fig_h = go.Figure(go.Heatmap(
-                    z=sector.values.reshape(-1, 1), x=['1M Avg'], y=sector.index,
-                    colorscale=[[0, '#1E2638'], [0.5, '#FF8C00'], [1, '#00FF88']],
-                    showscale=False, text=[[f"{v:.1f}%"] for v in sector.values],
-                    texttemplate="%{text}", textfont=dict(size=11, color='white')
-                ))
-                fig_h.update_layout(plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
-                                  height=420, margin=dict(l=10, r=10, t=10, b=10))
-                st.plotly_chart(fig_h, use_container_width=True)
+                fig_bar = px.bar(
+                    x=sector.values, y=sector.index,
+                    orientation='h',
+                    color=sector.values,
+                    color_continuous_scale='Blues'
+                )
+                fig_bar.update_layout(
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    font=dict(family='Inter', color='#1D1D1F'),
+                    xaxis=dict(gridcolor='rgba(0,0,0,0.05)', title='Avg 1M Return (%)'),
+                    yaxis=dict(gridcolor='rgba(0,0,0,0.05)'),
+                    height=450,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
         
-        st.markdown("##### WATCHLIST")
+        st.markdown("#### Watchlist")
         if not filtered.empty:
             display_cols = ['Symbol', 'Industry', 'CMP_Rs', 'MarCap_Cr', 
                            'YoY_NP_Growth_Pct', 'Ret_1M', 'Ret_1W', 'Ret_1D']
@@ -345,11 +480,11 @@ if uploaded_file is not None:
             
             def color_returns(val):
                 if pd.isna(val): return ''
-                if val > 5: return 'color: #00FF88; font-weight: bold'
-                elif val > 0: return 'color: #00FF88'
-                elif val < -3: return 'color: #FF4444; font-weight: bold'
-                elif val < 0: return 'color: #FF4444'
-                return 'color: #8892A8'
+                if val > 5: return 'color: #34C759; font-weight: 600'
+                elif val > 0: return 'color: #34C759'
+                elif val < -3: return 'color: #FF3B30; font-weight: 600'
+                elif val < 0: return 'color: #FF3B30'
+                return 'color: #86868B'
             
             styled = display_df.style.format({
                 'CMP_Rs': '₹{:,.2f}', 'MarCap_Cr': '₹{:,.0f}',
@@ -361,7 +496,7 @@ if uploaded_file is not None:
             
             if email_enabled and st.session_state.get('email_config', {}).get('sender_email'):
                 if st.button("📧 Send Watchlist Alert"):
-                    subject = f"🎯 Quant Terminal: {len(filtered)} Setups Found"
+                    subject = f"Quant Terminal: {len(filtered)} Setups Found"
                     body = f"Top 5 setups:\n\n"
                     for _, row in filtered.head(5).iterrows():
                         body += f"{row['Symbol']} | {row['Industry']} | NP Growth: {row['YoY_NP_Growth_Pct']:.1f}% | 1M: {row['Ret_1M']:.2f}%\n"
@@ -371,7 +506,7 @@ if uploaded_file is not None:
     
     # TAB 2: STOCK DEEP DIVE
     with tab2:
-        st.markdown("#### 🔍 STOCK DEEP DIVE WITH NEWS")
+        st.markdown("### Stock Deep Dive")
         
         selected = st.selectbox("Select Symbol", filtered['Symbol'].tolist() if not filtered.empty else [], index=0)
         
@@ -383,8 +518,8 @@ if uploaded_file is not None:
                     col_a.metric("P/E", f"{detail['pe']:.2f}" if isinstance(detail['pe'], (int, float)) else "N/A")
                     col_b.metric("P/B", f"{detail['pb']:.2f}" if isinstance(detail['pb'], (int, float)) else "N/A")
                     col_c.metric("ROE", f"{detail['roe']*100:.1f}%" if isinstance(detail['roe'], (int, float)) else "N/A")
-                    col_d.metric("52W HIGH", f"₹{detail['52w_high']:,.2f}" if isinstance(detail['52w_high'], (int, float)) else "N/A")
-                    col_e.metric("52W LOW", f"₹{detail['52w_low']:,.2f}" if isinstance(detail['52w_low'], (int, float)) else "N/A")
+                    col_d.metric("52W High", f"₹{detail['52w_high']:,.2f}" if isinstance(detail['52w_high'], (int, float)) else "N/A")
+                    col_e.metric("52W Low", f"₹{detail['52w_low']:,.2f}" if isinstance(detail['52w_low'], (int, float)) else "N/A")
                     
                     hist = detail['hist']
                     if not hist.empty:
@@ -392,33 +527,34 @@ if uploaded_file is not None:
                         fig_line.add_trace(go.Scatter(
                             x=hist.index, y=hist['Close'],
                             mode='lines', name=selected,
-                            line=dict(color='#FF8C00', width=2),
-                            fill='tozeroy', fillcolor='rgba(255,140,0,0.1)'
+                            line=dict(color='#007AFF', width=2),
+                            fill='tozeroy', fillcolor='rgba(0,122,255,0.1)'
                         ))
                         fig_line.update_layout(
-                            plot_bgcolor='#141B2D', paper_bgcolor='#141B2D',
-                            font=dict(family='Consolas', color='#8892A8'),
-                            xaxis=dict(gridcolor='#1E2638'), yaxis=dict(gridcolor='#1E2638'),
+                            plot_bgcolor='white', paper_bgcolor='white',
+                            font=dict(family='Inter', color='#1D1D1F'),
+                            xaxis=dict(gridcolor='rgba(0,0,0,0.05)'),
+                            yaxis=dict(gridcolor='rgba(0,0,0,0.05)'),
                             height=350, margin=dict(l=20, r=20, t=20, b=20),
-                            title=f"{selected} • 6-MONTH PRICE ACTION"
+                            title=f"{selected} • 6-Month Price Action"
                         )
                         st.plotly_chart(fig_line, use_container_width=True)
                     
                     if detail['news']:
-                        st.markdown("##### 📰 LATEST NEWS")
+                        st.markdown("#### Latest News")
                         for article in detail['news']:
                             st.markdown(f"**[{article['title']}]({article['link']})**")
-                            st.caption(f"{article['publisher']} • {datetime.fromtimestamp(article['providerPublishTime']).strftime('%Y-%m-%d %H:%M')}")
+                            st.caption(f"{article['publisher']} • {datetime.fromtimestamp(article['providerPublishTime']).strftime('%B %d, %Y')}")
                             st.markdown("---")
     
     # TAB 3: PORTFOLIO
     with tab3:
-        st.markdown("#### 💼 PORTFOLIO TRACKER")
+        st.markdown("### Portfolio Tracker")
         
         if 'portfolio' not in st.session_state:
             st.session_state.portfolio = []
         
-        st.markdown("##### ADD POSITION")
+        st.markdown("#### Add Position")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             new_symbol = st.text_input("Symbol")
@@ -437,7 +573,7 @@ if uploaded_file is not None:
                 st.success(f"✅ Added {new_symbol}")
         
         if st.session_state.portfolio:
-            st.markdown("##### CURRENT POSITIONS")
+            st.markdown("#### Current Positions")
             portfolio_df = pd.DataFrame(st.session_state.portfolio)
             symbols = portfolio_df['Symbol'].tolist()
             live_prices = fetch_live_data(symbols)
@@ -460,12 +596,12 @@ if uploaded_file is not None:
                 total_pnl = portfolio_df['P&L'].sum()
                 
                 c1, c2, c3 = st.columns(3)
-                c1.metric("TOTAL INVESTED", f"₹{total_invested:,.0f}")
-                c2.metric("CURRENT VALUE", f"₹{total_current:,.0f}")
-                c3.metric("TOTAL P&L", f"₹{total_pnl:,.0f}", f"{(total_pnl/total_invested)*100:+.2f}%")
+                c1.metric("Total Invested", f"₹{total_invested:,.0f}")
+                c2.metric("Current Value", f"₹{total_current:,.0f}")
+                c3.metric("Total P&L", f"₹{total_pnl:,.0f}", f"{(total_pnl/total_invested)*100:+.2f}%")
         
         if st.session_state.portfolio:
-            st.markdown("##### REMOVE POSITION")
+            st.markdown("#### Remove Position")
             remove_symbol = st.selectbox("Select Symbol to Remove", [p['Symbol'] for p in st.session_state.portfolio])
             if st.button("🗑️ Remove"):
                 st.session_state.portfolio = [p for p in st.session_state.portfolio if p['Symbol'] != remove_symbol]
@@ -473,7 +609,7 @@ if uploaded_file is not None:
     
     # TAB 4: OPTIONS CHAIN
     with tab4:
-        st.markdown("#### 📈 OPTIONS CHAIN (F&O)")
+        st.markdown("### Options Chain")
         
         fno_list = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 
                    'SBIN', 'ITC', 'LT', 'HINDUNILVR', 'BAJFINANCE',
@@ -487,8 +623,8 @@ if uploaded_file is not None:
                 
                 if oc_data:
                     c1, c2, c3 = st.columns(3)
-                    c1.metric("SPOT PRICE", f"₹{oc_data['spot']:,.2f}")
-                    c2.metric("EXPIRY", oc_data['expiry'])
+                    c1.metric("Spot Price", f"₹{oc_data['spot']:,.2f}")
+                    c2.metric("Expiry", oc_data['expiry'])
                     c3.metric("PCR (OI)", f"{oc_data['puts']['OI'].sum() / max(oc_data['calls']['OI'].sum(), 1):.2f}")
                     
                     st.markdown("---")
@@ -496,7 +632,7 @@ if uploaded_file is not None:
                     col_left, col_right = st.columns(2)
                     
                     with col_left:
-                        st.markdown("##### 🟢 CALLS")
+                        st.markdown("#### Calls")
                         st.dataframe(
                             oc_data['calls'].style.format({
                                 'Strike': '₹{:,.2f}', 'LTP': '₹{:,.2f}',
@@ -507,7 +643,7 @@ if uploaded_file is not None:
                         )
                     
                     with col_right:
-                        st.markdown("##### 🔴 PUTS")
+                        st.markdown("#### Puts")
                         st.dataframe(
                             oc_data['puts'].style.format({
                                 'Strike': '₹{:,.2f}', 'LTP': '₹{:,.2f}',
@@ -517,23 +653,23 @@ if uploaded_file is not None:
                             use_container_width=True, height=400
                         )
                     
-                    st.markdown("##### 📊 KEY LEVELS")
+                    st.markdown("#### Key Levels")
                     max_call_oi_strike = oc_data['calls'].loc[oc_data['calls']['OI'].idxmax(), 'Strike']
                     max_put_oi_strike = oc_data['puts'].loc[oc_data['puts']['OI'].idxmax(), 'Strike']
                     
                     mc1, mc2, mc3 = st.columns(3)
-                    mc1.metric("MAX CALL OI (Resistance)", f"₹{max_call_oi_strike:,.2f}")
-                    mc2.metric("MAX PUT OI (Support)", f"₹{max_put_oi_strike:,.2f}")
-                    mc3.metric("ATM STRIKE", f"₹{oc_data['spot']:,.2f}")
+                    mc1.metric("Max Call OI (Resistance)", f"₹{max_call_oi_strike:,.2f}")
+                    mc2.metric("Max Put OI (Support)", f"₹{max_put_oi_strike:,.2f}")
+                    mc3.metric("ATM Strike", f"₹{oc_data['spot']:,.2f}")
                 else:
-                    st.warning(f"⚠️ Could not fetch options chain for {oc_symbol}.")
+                    st.warning(f"Could not fetch options chain for {oc_symbol}.")
     
     # TAB 5: AI ANALYSIS
     with tab5:
-        st.markdown("#### 🤖 AI-POWERED STOCK ANALYSIS")
+        st.markdown("### AI-Powered Stock Analysis")
         
         if not st.session_state.get('groq_api_key'):
-            st.warning("⚠️ Please enter your Groq API Key in the sidebar.")
+            st.warning("Please enter your Groq API Key in the sidebar.")
             st.markdown("**Get your free API key:** https://console.groq.com")
         else:
             ai_symbol = st.selectbox("Select Symbol for AI Analysis", 
@@ -547,22 +683,24 @@ if uploaded_file is not None:
                     if st.button("🧠 Generate AI Analysis"):
                         with st.spinner("Analyzing with AI..."):
                             analysis = generate_ai_analysis(ai_symbol, stock_row.to_dict())
-                            st.markdown("##### ANALYSIS RESULT")
+                            st.markdown("#### Analysis Result")
                             st.markdown(analysis)
     
-    # STATUS BAR
+    # FOOTER
+    st.markdown("---")
     st.markdown(f"""
-    <div class='status-bar'>
-        <div><span class='status-indicator'></span>LIVE: {'ON' if live_mode else 'OFF'} | AI: {'ON' if st.session_state.get('groq_api_key') else 'OFF'} | SYMBOLS: {len(df)} | FILTERED: {len(filtered)}</div>
-        <div>QUANT TERMINAL PRO v4.0 • © 2026</div>
+    <div style='text-align: center; color: #86868B; font-size: 0.85rem; padding: 20px;'>
+        Quant Terminal • Built with Streamlit • {now}
     </div>
     """, unsafe_allow_html=True)
 
 else:
     st.markdown("""
-    <div style='text-align: center; padding: 80px 20px; border: 1px dashed #FF8C00; 
-                background-color: #141B2D; border-radius: 4px; margin-top: 40px;'>
-        <h2 style='color: #FF8C00;'>⚠ AWAITING DATA FEED</h2>
-        <p style='color: #8892A8;'>Upload Excel file via sidebar to initialize terminal.</p>
+    <div style='text-align: center; padding: 80px 20px; background: white; 
+                border-radius: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-top: 40px;'>
+        <h2 style='color: #1D1D1F; font-weight: 600;'>Upload Your Data</h2>
+        <p style='color: #86868B; font-size: 1.1rem;'>
+            Upload your Excel file via the sidebar to get started.
+        </p>
     </div>
     """, unsafe_allow_html=True)
