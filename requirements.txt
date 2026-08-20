@@ -5,3 +5,6 @@
    openpyxl
  matplotlib
 yfinance
+groq
+nsepython
+requests
