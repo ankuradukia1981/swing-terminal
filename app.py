@@ -157,37 +157,8 @@ h2, h3, h4 {
     font-weight: 400;
 }
 
-/* CARDS */
-.card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    margin-bottom: 16px;
-}
-
-/* STATUS INDICATOR */
-.status-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #34C759;
-    margin-right: 8px;
-    animation: pulse 2s infinite;
-}
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
 /* HIDE STREAMLIT BRANDING */
 #MainMenu, header, footer {visibility: hidden;}
-
-/* SMOOTH SCROLLING */
-html {
-    scroll-behavior: smooth;
-}
 </style>
 """
 st.markdown(APPLE_CSS, unsafe_allow_html=True)
@@ -314,8 +285,9 @@ Provide a concise 3-point analysis:
 
 Keep it under 150 words."""
         
+        # Hardcoded to Qwen 3.6 27B as requested
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="qwen-3.6-27b", 
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=300
@@ -425,7 +397,7 @@ if uploaded_file is not None:
     st.markdown("---")
     
     # TABS
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Screener", "🔍 Stock Details", "💼 Portfolio", "📈 Options", "🤖 AI Analysis"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Screener", "🔍 Stock Details", " Portfolio", "📈 Options", " AI Analysis"])
     
     # TAB 1: SCREENER
     with tab1:
@@ -647,7 +619,7 @@ if uploaded_file is not None:
                         st.dataframe(
                             oc_data['puts'].style.format({
                                 'Strike': '₹{:,.2f}', 'LTP': '₹{:,.2f}',
-                                'Bid': '₹{:,.2f}', 'Ask': '₹{:,.2f}',
+                                'Bid': '{:,.2f}', 'Ask': '₹{:,.2f}',
                                 'Volume': '{:,.0f}', 'OI': '{:,.0f}', 'IV': '{:.2%}'
                             }),
                             use_container_width=True, height=400
@@ -667,6 +639,7 @@ if uploaded_file is not None:
     # TAB 5: AI ANALYSIS
     with tab5:
         st.markdown("### AI-Powered Stock Analysis")
+        st.caption("Powered by Qwen 3.6 27B")
         
         if not st.session_state.get('groq_api_key'):
             st.warning("Please enter your Groq API Key in the sidebar.")
@@ -680,7 +653,7 @@ if uploaded_file is not None:
                 stock_row = filtered[filtered['Symbol'] == ai_symbol].iloc[0] if not filtered.empty else None
                 
                 if stock_row is not None:
-                    if st.button("🧠 Generate AI Analysis"):
+                    if st.button(" Generate AI Analysis"):
                         with st.spinner("Analyzing with AI..."):
                             analysis = generate_ai_analysis(ai_symbol, stock_row.to_dict())
                             st.markdown("#### Analysis Result")
