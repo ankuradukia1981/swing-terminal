@@ -1,10 +1,10 @@
    streamlit
-   pandas
-   numpy
-   plotly
-   openpyxl
- matplotlib
+ streamlit
+pandas
+numpy
+plotly
+openpyxl
+matplotlib
 yfinance
 groq
-nsepython
 requests
