@@ -361,8 +361,8 @@ if uploaded_file is not None:
             'Ret_1M': '{:+.2f}%',
             'Ret_1W': '{:+.2f}%',
             'Ret_1D': '{:+.2f}%'
-        }).applymap(color_returns, subset=['Ret_1M', 'Ret_1W', 'Ret_1D', 
-                                            'YoY_Rev_Growth_Pct', 'YoY_NP_Growth_Pct'])
+           }).map(color_returns, subset=['Ret_1M', 'Ret_1W', 'Ret_1D', 
+                                  'YoY_Rev_Growth_Pct', 'YoY_NP_Growth_Pct'])
         
         st.dataframe(styled, use_container_width=True, height=500)
         
