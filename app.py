@@ -287,7 +287,7 @@ Keep it under 150 words."""
         
         # Hardcoded to Qwen 3.6 27B as requested
         completion = client.chat.completions.create(
-            model="qwen-3.6-27b", 
+            model="qwen/qwen3.6-27b", 
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=300
