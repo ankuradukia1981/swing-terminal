@@ -1,4 +1,9 @@
-.env
-__pycache__/
-.streamlit/
-*.zip
+# Add the theme configuration folder explicitly into git tracking
+git add .streamlit/config.toml
+
+# Untrack the public .env file so it stops updating on github
+git rm --cached .env
+
+# Commit and push updates to your main branch
+git commit -m "Fix: Add config.toml to repo tracking and ignore private env parameters"
+git push origin main
